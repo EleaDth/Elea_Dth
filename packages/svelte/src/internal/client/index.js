@@ -15,7 +15,7 @@ export { key_block as key } from './dom/blocks/key.js';
 export { css_props } from './dom/blocks/css-props.js';
 export { index, each } from './dom/blocks/each.js';
 export { html } from './dom/blocks/html.js';
-export { snippet, wrap_snippet } from './dom/blocks/snippet.js';
+export { snippet, wrap_snippet, render_snippet_or_slot } from './dom/blocks/snippet.js';
 export { component } from './dom/blocks/svelte-component.js';
 export { element } from './dom/blocks/svelte-element.js';
 export { head } from './dom/blocks/svelte-head.js';
@@ -72,8 +72,7 @@ export {
 	add_legacy_event_listener,
 	bubble_event,
 	reactive_import,
-	update_legacy_props,
-	default_slot
+	update_legacy_props
 } from './dom/legacy/misc.js';
 export {
 	append,

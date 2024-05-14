@@ -499,12 +499,22 @@ export async function value_or_fallback_async(value, fallback) {
 
 /**
  * @param {Payload} payload
- * @param {void | ((payload: Payload, props: Record<string, unknown>) => void)} slot_fn
+ * @param {Record<string, any>} $$props
+ * @param {string} slot_name
  * @param {Record<string, unknown>} slot_props
  * @param {null | (() => void)} fallback_fn
  * @returns {void}
  */
-export function slot(payload, slot_fn, slot_props, fallback_fn) {
+export function slot(payload, $$props, slot_name, slot_props, fallback_fn) {
+	var slot_fn = $$props.$$slots?.[slot_name];
+	if (slot_fn === true) {
+		if (slot_name === 'default') {
+			slot_fn = $$props.children;
+		} else {
+			slot_fn = $$props[slot_name];
+		}
+	}
+
 	if (slot_fn === undefined) {
 		if (fallback_fn !== null) {
 			fallback_fn();
@@ -545,9 +555,32 @@ export function sanitize_props(props) {
  * @returns {Record<string, any>}
  */
 export function sanitize_slots(props) {
-	const sanitized = { ...props.$$slots };
-	if (props.children) sanitized.default = props.children;
+	/** @type {Record<string, boolean>} */
+	const sanitized = {};
+	for (const key in props.$$slots) {
+		sanitized[key] = true;
+	}
 	return sanitized;
+}
+
+/**
+ * Remove this once slots are gone
+ * @param {any} snippet_fn
+ * @param {Record<string, any>} $$props
+ * @param {string} name
+ * @param {Payload} payload
+ * @param {any} slot_props
+ */
+export function render_snippet_or_slot(snippet_fn, $$props, name, payload, slot_props) {
+	if ($$props.$$slots) {
+		const slot = $$props.$$slots[name === 'children' ? 'default' : name];
+		if (typeof slot === 'function') {
+			slot(payload, slot_props);
+			return;
+		}
+	}
+
+	snippet_fn?.(payload, slot_props);
 }
 
 /**
@@ -631,5 +664,3 @@ export {
 } from '../shared/validate.js';
 
 export { escape_html as escape };
-
-export { default_slot } from '../client/dom/legacy/misc.js';

@@ -1037,6 +1037,8 @@ function serialize_inline_component(node, component_name, context) {
 
 	/** @type {import('estree').Statement[]} */
 	const snippet_declarations = [];
+	/** @type {import('estree').Property[]} */
+	const serialized_slots = [];
 
 	// Group children by slot
 	for (const child of node.fragment.nodes) {
@@ -1050,6 +1052,8 @@ function serialize_inline_component(node, component_name, context) {
 			});
 
 			push_prop(b.prop('init', child.expression, child.expression));
+			// Back/forward compatibility: allows people to pass snippets when component still uses slots
+			serialized_slots.push(b.init(child.expression.name, b.true));
 
 			continue;
 		}
@@ -1071,9 +1075,6 @@ function serialize_inline_component(node, component_name, context) {
 	}
 
 	// Serialize each slot
-	/** @type {import('estree').Property[]} */
-	const serialized_slots = [];
-
 	for (const slot_name of Object.keys(children)) {
 		const body = create_block(node, children[slot_name], context);
 		if (body.length === 0) continue;
@@ -1302,6 +1303,10 @@ const template_visitors = {
 
 		const callee = unwrap_optional(node.expression).callee;
 		const raw_args = unwrap_optional(node.expression).arguments;
+		const needs_backwards_compat =
+			callee.type === 'Identifier' &&
+			raw_args.length < 2 &&
+			context.state.scope.get(callee.name)?.kind === 'prop';
 
 		const expression = /** @type {import('estree').Expression} */ (context.visit(callee));
 		const snippet_function = state.options.dev
@@ -1312,17 +1317,34 @@ const template_visitors = {
 			return /** @type {import('estree').Expression} */ (context.visit(arg));
 		});
 
-		state.template.push(
-			t_statement(
-				b.stmt(
-					(node.expression.type === 'CallExpression' ? b.call : b.maybe_call)(
-						snippet_function,
-						b.id('$$payload'),
-						...snippet_args
+		if (needs_backwards_compat) {
+			state.template.push(
+				t_statement(
+					b.stmt(
+						b.call(
+							'$.render_snippet_or_slot',
+							snippet_function,
+							b.id('$$props'),
+							b.literal(callee.name),
+							b.id('$$payload'),
+							...snippet_args
+						)
 					)
 				)
-			)
-		);
+			);
+		} else {
+			state.template.push(
+				t_statement(
+					b.stmt(
+						(node.expression.type === 'CallExpression' ? b.call : b.maybe_call)(
+							snippet_function,
+							b.id('$$payload'),
+							...snippet_args
+						)
+					)
+				)
+			);
+		}
 
 		state.template.push(block_close);
 	},
@@ -1750,7 +1772,7 @@ const template_visitors = {
 		const lets = [];
 
 		/** @type {import('estree').Expression} */
-		let expression = b.call('$.default_slot', b.id('$$props'));
+		let slot_name = b.literal('default');
 
 		for (const attribute of node.attributes) {
 			if (attribute.type === 'SpreadAttribute') {
@@ -1758,7 +1780,7 @@ const template_visitors = {
 			} else if (attribute.type === 'Attribute') {
 				const value = serialize_attribute_value(attribute.value, context, false, true);
 				if (attribute.name === 'name') {
-					expression = b.member(b.member_id('$$props.$$slots'), value, true, true);
+					slot_name = value;
 				} else if (attribute.name !== 'slot') {
 					if (attribute.metadata.dynamic) {
 						props.push(b.get(attribute.name, [b.return(value)]));
@@ -1782,7 +1804,14 @@ const template_visitors = {
 			node.fragment.nodes.length === 0
 				? b.literal(null)
 				: b.thunk(b.block(create_block(node, node.fragment.nodes, context)));
-		const slot = b.call('$.slot', b.id('$$payload'), expression, props_expression, fallback);
+		const slot = b.call(
+			'$.slot',
+			b.id('$$payload'),
+			b.id('$$props'),
+			slot_name,
+			props_expression,
+			fallback
+		);
 
 		state.template.push(t_statement(b.stmt(slot)));
 		state.template.push(block_close);

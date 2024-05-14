@@ -63,17 +63,29 @@ export function set_text(dom, value) {
 
 /**
  * @param {Comment} anchor
- * @param {void | ((anchor: Comment, slot_props: Record<string, unknown>) => void)} slot_fn
+ * @param {Record<string, any>} $$props
+ * @param {string} slot_name
  * @param {Record<string, unknown>} slot_props
  * @param {null | ((anchor: Comment) => void)} fallback_fn
  */
-export function slot(anchor, slot_fn, slot_props, fallback_fn) {
+export function slot(anchor, $$props, slot_name, slot_props, fallback_fn) {
+	var is_snippet = false;
+	var slot_fn = $$props.$$slots?.[slot_name];
+	if (slot_fn === true) {
+		if (slot_name === 'default') {
+			slot_fn = $$props.children;
+		} else {
+			is_snippet = true;
+			slot_fn = $$props[slot_name];
+		}
+	}
+
 	if (slot_fn === undefined) {
 		if (fallback_fn !== null) {
 			fallback_fn(anchor);
 		}
 	} else {
-		slot_fn(anchor, slot_props);
+		slot_fn(anchor, is_snippet ? () => slot_props : slot_props);
 	}
 }
 
@@ -312,8 +324,11 @@ export function unmount(component) {
  * @returns {Record<string, any>}
  */
 export function sanitize_slots(props) {
-	const sanitized = { ...props.$$slots };
-	if (props.children) sanitized.default = props.children;
+	/** @type {Record<string, boolean>} */
+	const sanitized = {};
+	for (const key in props.$$slots) {
+		sanitized[key] = true;
+	}
 	return sanitized;
 }
 

@@ -789,6 +789,8 @@ function serialize_inline_component(node, component_name, context) {
 
 	/** @type {import('estree').Statement[]} */
 	const snippet_declarations = [];
+	/** @type {import('estree').Property[]} */
+	const serialized_slots = [];
 
 	// Group children by slot
 	for (const child of node.fragment.nodes) {
@@ -802,6 +804,8 @@ function serialize_inline_component(node, component_name, context) {
 			});
 
 			push_prop(b.prop('init', child.expression, child.expression));
+			// Back/forward compatibility: allows people to pass snippets when component still uses slots
+			serialized_slots.push(b.init(child.expression.name, b.true));
 
 			continue;
 		}
@@ -825,8 +829,6 @@ function serialize_inline_component(node, component_name, context) {
 	}
 
 	// Serialize each slot
-	/** @type {import('estree').Property[]} */
-	const serialized_slots = [];
 	for (const slot_name of Object.keys(children)) {
 		const body = create_block(node, `${node.name}_${slot_name}`, children[slot_name], context);
 		if (body.length === 0) continue;
@@ -1784,6 +1786,10 @@ export const template_visitors = {
 		const raw_args = unwrap_optional(node.expression).arguments;
 		const is_reactive =
 			callee.type !== 'Identifier' || context.state.scope.get(callee.name)?.kind !== 'normal';
+		const needs_backwards_compat =
+			callee.type === 'Identifier' &&
+			raw_args.length < 2 &&
+			context.state.scope.get(callee.name)?.kind === 'prop';
 
 		/** @type {import('estree').Expression[]} */
 		const args = [context.state.node];
@@ -1796,7 +1802,19 @@ export const template_visitors = {
 			snippet_function = b.call('$.validate_snippet', snippet_function);
 		}
 
-		if (is_reactive) {
+		if (needs_backwards_compat) {
+			context.state.init.push(
+				b.stmt(
+					b.call(
+						'$.render_snippet_or_slot',
+						b.thunk(snippet_function),
+						b.id('$$props'),
+						b.literal(callee.name),
+						...args
+					)
+				)
+			);
+		} else if (is_reactive) {
 			context.state.init.push(b.stmt(b.call('$.snippet', b.thunk(snippet_function), ...args)));
 		} else {
 			context.state.init.push(
@@ -3070,11 +3088,14 @@ export const template_visitors = {
 						b.block(create_block(node, 'fallback', node.fragment.nodes, context))
 					);
 
-		const expression = is_default
-			? b.call('$.default_slot', b.id('$$props'))
-			: b.member(b.member(b.id('$$props'), b.id('$$slots')), name, true, true);
-
-		const slot = b.call('$.slot', context.state.node, expression, props_expression, fallback);
+		const slot = b.call(
+			'$.slot',
+			context.state.node,
+			b.id('$$props'),
+			name,
+			props_expression,
+			fallback
+		);
 		context.state.init.push(b.stmt(slot));
 	},
 	SvelteHead(node, context) {
