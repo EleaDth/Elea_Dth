@@ -8,6 +8,8 @@ import {
 } from '@sveltejs/site-kit/markdown';
 import { CONTENT_BASE_PATHS } from '../../../constants.js';
 import { render_content } from '../renderer';
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 /**
  * @param {import('./types').DocsData} docs_data
@@ -28,8 +30,22 @@ export async function get_parsed_docs(docs_data, slug) {
 	return null;
 }
 
-/** @return {Promise<import('./types').DocsData>} */
-export async function get_docs_data(base = CONTENT_BASE_PATHS.DOCS) {
+/**
+ * @param {string} version
+ * @return {Promise<import('./types').DocsData>}
+ * */
+export async function get_docs_data(version = undefined) {
+	if (version?.startsWith('v-')) version = version.substring(2);
+	let base;
+	const version_group = (await get_versions()).find((group) => version in group.versions);
+	if (version_group)
+		base = join(
+			CONTENT_BASE_PATHS.PREVIOUS_DOCS,
+			version_group.id,
+			version_group.versions[version]
+		);
+	else base = CONTENT_BASE_PATHS.DOCS;
+
 	const { readdir, readFile } = await import('node:fs/promises');
 
 	/** @type {import('./types').DocsData} */
@@ -57,10 +73,10 @@ export async function get_docs_data(base = CONTENT_BASE_PATHS.DOCS) {
 
 		for (const filename of await readdir(`${base}/${category_dir}`)) {
 			if (filename === 'meta.json') continue;
-			const match = /\d{2}-(.+)/.exec(filename);
+			const match = /\d{2}-(.+)\.md/.exec(filename);
 			if (!match) continue;
 
-			const page_slug = match[1].replace('.md', '');
+			const page_slug = match[1];
 
 			const page_data = extractFrontmatter(
 				await readFile(`${base}/${category_dir}/${filename}`, 'utf-8')
@@ -77,7 +93,7 @@ export async function get_docs_data(base = CONTENT_BASE_PATHS.DOCS) {
 				content: page_content,
 				category: category_title,
 				sections: await get_sections(page_content),
-				path: `${app_base}/docs/${page_slug}`,
+				path: `${app_base}/docs/${version ? `v-${version}/` : ''}${page_slug}`,
 				file: `${category_dir}/${filename}`
 			});
 		}
@@ -94,7 +110,8 @@ export function get_docs_list(docs_data) {
 		title: category.title,
 		pages: category.pages.map((page) => ({
 			title: page.title,
-			path: page.path
+			path: page.path,
+			slug: page.slug
 		}))
 	}));
 }
@@ -131,6 +148,7 @@ export async function get_sections(markdown) {
 		const match = line.match(/^(#{2,4})\s(.*)/);
 		if (match) {
 			const level = match[1].length - 2;
+			if (!currentNodes[level]) continue;
 			const text = await titled(match[2]);
 			const slug = normalizeSlugify(text);
 
@@ -159,4 +177,24 @@ export async function get_sections(markdown) {
 	}
 
 	return /** @type {import('./types').Section[]} */ (root.sections);
+}
+
+/**
+ * @return {Promise<import('$lib/docs/types').VersionGroup[]>}
+ */
+export async function get_versions() {
+	const base = CONTENT_BASE_PATHS.PREVIOUS_DOCS;
+	return Promise.all(
+		(await readdir(base)).map(async (dir) => {
+			const { title } = JSON.parse(await readFile(join(base, dir, 'config.json'), 'utf-8'));
+			const versions = await readdir(join(base, dir));
+			versions.splice(versions.indexOf('config.json'), 1);
+			versions.sort();
+			return {
+				title,
+				id: dir,
+				versions: Object.fromEntries(versions.map((dir) => [dir.substring(4), dir]))
+			};
+		})
+	);
 }
