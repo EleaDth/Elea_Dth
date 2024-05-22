@@ -149,6 +149,7 @@ export { raf } from './timing.js';
 export { proxy, snapshot, is } from './proxy.js';
 export { create_custom_element } from './dom/elements/custom-element.js';
 export {
+	anchor,
 	child,
 	first_child,
 	sibling,
