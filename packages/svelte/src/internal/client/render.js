@@ -5,7 +5,7 @@ import { flush_sync, push, pop, current_component_context } from './runtime.js';
 import { effect_root, branch } from './reactivity/effects.js';
 import {
 	hydrate_anchor,
-	hydrate_nodes,
+	hydrate_start,
 	hydrating,
 	set_hydrate_nodes,
 	set_hydrating
@@ -129,7 +129,7 @@ export function hydrate(component, options) {
 	}
 
 	const target = options.target;
-	const previous_hydrate_nodes = hydrate_nodes;
+	const previous_hydrate_start = hydrate_start;
 
 	try {
 		// Don't flush previous effects to ensure order of outer effects stays consistent
@@ -173,8 +173,8 @@ export function hydrate(component, options) {
 
 		throw error;
 	} finally {
-		set_hydrating(!!previous_hydrate_nodes);
-		set_hydrate_nodes(previous_hydrate_nodes);
+		set_hydrating(!!previous_hydrate_start);
+		set_hydrate_nodes(previous_hydrate_start);
 		reset_head_anchor();
 	}
 }

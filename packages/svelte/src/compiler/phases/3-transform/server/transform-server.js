@@ -38,6 +38,7 @@ import { filename, locator } from '../../../state.js';
 
 export const block_open = t_string(`<!--${HYDRATION_START}-->`);
 export const block_close = t_string(`<!--${HYDRATION_END}-->`);
+export const block_anchor = t_string(`<!---->`);
 
 /**
  * @param {string} value
@@ -959,9 +960,12 @@ function serialize_element_spread_attributes(
  * @param {import('#compiler').Component | import('#compiler').SvelteComponent | import('#compiler').SvelteSelf} node
  * @param {string | import('estree').Expression} component_name
  * @param {import('./types').ComponentContext} context
- * @returns {import('estree').Statement}
+ * @returns {import('estree').Statement[]}
  */
 function serialize_inline_component(node, component_name, context) {
+	/** @type {import('./types').Template[]} */
+	const parts = [];
+
 	/** @type {Array<import('estree').Property[] | import('estree').Expression>} */
 	const props_and_spreads = [];
 
@@ -1123,37 +1127,43 @@ function serialize_inline_component(node, component_name, context) {
 					b.array(props_and_spreads.map((p) => (Array.isArray(p) ? b.object(p) : p)))
 				);
 
-	/** @type {import('estree').Statement} */
-	let statement = b.stmt(
-		(typeof component_name === 'string' ? b.call : b.maybe_call)(
-			context.state.options.dev
-				? b.call(
-						'$.validate_component',
-						typeof component_name === 'string' ? b.id(component_name) : component_name
-					)
-				: component_name,
-			b.id('$$payload'),
-			props_expression
-		)
-	);
+	/** @type {import('estree').Statement[]} */
+	let statements = [
+		b.stmt(b.assignment('+=', b.id('$$payload.out'), b.literal(block_open.value))),
+		b.stmt(
+			(typeof component_name === 'string' ? b.call : b.maybe_call)(
+				context.state.options.dev
+					? b.call(
+							'$.validate_component',
+							typeof component_name === 'string' ? b.id(component_name) : component_name
+						)
+					: component_name,
+				b.id('$$payload'),
+				props_expression
+			)
+		),
+		b.stmt(b.assignment('+=', b.id('$$payload.out'), b.literal(block_close.value)))
+	];
 
 	if (custom_css_props.length > 0) {
-		statement = b.stmt(
-			b.call(
-				'$.css_props',
-				b.id('$$payload'),
-				b.literal(context.state.metadata.namespace === 'svg' ? false : true),
-				b.object(custom_css_props),
-				b.thunk(b.block([statement]))
+		statements = [
+			b.stmt(
+				b.call(
+					'$.css_props',
+					b.id('$$payload'),
+					b.literal(context.state.metadata.namespace === 'svg' ? false : true),
+					b.object(custom_css_props),
+					b.thunk(b.block(statements))
+				)
 			)
-		);
+		];
 	}
 
 	if (snippet_declarations.length > 0) {
-		statement = b.block([...snippet_declarations, statement]);
+		statements = [b.block([...snippet_declarations, ...statements])];
 	}
 
-	return statement;
+	return statements;
 }
 
 /**
@@ -1470,8 +1480,6 @@ const template_visitors = {
 			}
 		};
 
-		context.state.template.push(block_open);
-
 		const main = create_block(node, node.fragment.nodes, {
 			...context,
 			state: { ...context.state, metadata }
@@ -1506,7 +1514,7 @@ const template_visitors = {
 					)
 				)
 			),
-			block_close
+			block_anchor
 		);
 		if (context.state.options.dev) {
 			context.state.template.push(t_statement(b.stmt(b.call('$.pop_element'))));
@@ -1654,29 +1662,27 @@ const template_visitors = {
 		}
 	},
 	Component(node, context) {
-		const state = context.state;
-		state.template.push(block_open);
-		const call = serialize_inline_component(node, node.name, context);
-		state.template.push(t_statement(call));
-		state.template.push(block_close);
+		context.state.template.push(
+			...serialize_inline_component(node, node.name, context).map((statement) =>
+				t_statement(statement)
+			)
+		);
 	},
 	SvelteSelf(node, context) {
-		const state = context.state;
-		state.template.push(block_open);
-		const call = serialize_inline_component(node, context.state.analysis.name, context);
-		state.template.push(t_statement(call));
-		state.template.push(block_close);
+		context.state.template.push(
+			...serialize_inline_component(node, context.state.analysis.name, context).map((statement) =>
+				t_statement(statement)
+			)
+		);
 	},
 	SvelteComponent(node, context) {
-		const state = context.state;
-		state.template.push(block_open);
-		const call = serialize_inline_component(
-			node,
-			/** @type {import('estree').Expression} */ (context.visit(node.expression)),
-			context
+		context.state.template.push(
+			...serialize_inline_component(
+				node,
+				/** @type {import('estree').Expression} */ (context.visit(node.expression)),
+				context
+			).map((statement) => t_statement(statement))
 		);
-		state.template.push(t_statement(call));
-		state.template.push(block_close);
 	},
 	LetDirective(node, { state }) {
 		if (node.expression && node.expression.type !== 'Identifier') {
