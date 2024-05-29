@@ -1,7 +1,6 @@
 import { hydrate_anchor, hydrate_start, hydrating } from './hydration.js';
 import { DEV } from 'esm-env';
 import { init_array_prototype_warnings } from '../dev/equality.js';
-import { current_effect } from '../runtime.js';
 
 // export these for reference in the compiled code, making global name deduplication unnecessary
 /** @type {Window} */
@@ -69,7 +68,7 @@ export function child(node) {
 }
 
 /**
- * @param {DocumentFragment | import('#client').TemplateNode[]} fragment
+ * @param {DocumentFragment} fragment
  * @param {boolean} is_text
  * @returns {Node | null}
  */
@@ -83,14 +82,8 @@ export function first_child(fragment, is_text) {
 	// if an {expression} is empty during SSR, there might be no
 	// text node to hydrate — we must therefore create one
 	if (is_text && hydrate_start?.nodeType !== 3) {
-		var text = empty();
-		var dom = /** @type {import('#client').TemplateNode[]} */ (
-			/** @type {import('#client').Effect} */ (current_effect).dom
-		);
-
-		dom.unshift(text);
+		const text = empty();
 		hydrate_start?.before(text);
-
 		return text;
 	}
 
@@ -114,14 +107,8 @@ export function sibling(node, is_text = false) {
 	// if a sibling {expression} is empty during SSR, there might be no
 	// text node to hydrate — we must therefore create one
 	if (is_text && next_sibling?.nodeType !== 3) {
-		var text = empty();
-		var dom = /** @type {import('#client').TemplateNode[]} */ (
-			/** @type {import('#client').Effect} */ (current_effect).dom
-		);
-
-		dom.unshift(text);
+		const text = empty();
 		next_sibling?.before(text);
-
 		return text;
 	}
 
@@ -141,4 +128,22 @@ export function clear_text_content(node) {
 /*#__NO_SIDE_EFFECTS__*/
 export function create_element(name) {
 	return document.createElement(name);
+}
+
+/**
+ * Remove all nodes between `from` and `to`, inclusive
+ * @param {import('#client').TemplateNode} from
+ * @param {import('#client').TemplateNode} to
+ */
+export function remove_nodes(from, to) {
+	var node = from;
+
+	while (node) {
+		var next = node.nextSibling;
+
+		node.remove();
+		if (node === to) break;
+
+		node = /** @type {import('#client').TemplateNode} */ (next);
+	}
 }

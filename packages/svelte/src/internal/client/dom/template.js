@@ -1,4 +1,4 @@
-import { hydrate_nodes, hydrate_start, hydrating } from './hydration.js';
+import { hydrate_start, hydrating } from './hydration.js';
 import { empty } from './operations.js';
 import { create_fragment_from_html } from './reconciler.js';
 import { current_effect } from '../runtime.js';
@@ -6,14 +6,14 @@ import { TEMPLATE_FRAGMENT, TEMPLATE_USE_IMPORT_NODE } from '../../../constants.
 import { effect } from '../reactivity/effects.js';
 
 /**
- * @template {import("#client").TemplateNode | import("#client").TemplateNode[]} T
- * @param {T} dom
+ * @template {import("#client").TemplateNode} T
+ * @param {T} d1
  */
-function push_template_node(dom) {
+function push_template_node(d1) {
 	var effect = /** @type {import('#client').Effect} */ (current_effect);
 
-	if (effect.dom === null) {
-		effect.dom = dom;
+	if (effect.d1 === null) {
+		effect.d1 = d1;
 	}
 }
 
@@ -32,7 +32,7 @@ export function template(content, flags) {
 
 	return () => {
 		if (hydrating) {
-			push_template_node(is_fragment ? hydrate_nodes : hydrate_start);
+			push_template_node(hydrate_start);
 			return hydrate_start;
 		}
 
@@ -77,7 +77,6 @@ export function template_with_script(content, flags) {
  */
 /*#__NO_SIDE_EFFECTS__*/
 export function ns_template(content, flags, ns = 'svg') {
-	var is_fragment = (flags & TEMPLATE_FRAGMENT) !== 0;
 	var fn = template(`<${ns}>${content}</${ns}>`, 0); // we don't need to worry about using importNode for namespaced elements
 
 	/** @type {Element | DocumentFragment} */
@@ -85,7 +84,7 @@ export function ns_template(content, flags, ns = 'svg') {
 
 	return () => {
 		if (hydrating) {
-			push_template_node(is_fragment ? hydrate_nodes : hydrate_start);
+			push_template_node(hydrate_start);
 			return hydrate_start;
 		}
 
@@ -182,7 +181,7 @@ export function text(anchor) {
 	var node = hydrate_start;
 
 	if (!node) {
-		// if an {expression} is empty during SSR, `hydrate_nodes` will be empty.
+		// if an {expression} is empty during SSR, `hydrate_start` will be missing.
 		// we need to insert an empty text node
 		anchor.before((node = empty()));
 	}
@@ -194,7 +193,7 @@ export function text(anchor) {
 export function comment() {
 	// we're not delegating to `template` here for performance reasons
 	if (hydrating) {
-		push_template_node(hydrate_nodes);
+		push_template_node(hydrate_start);
 		return hydrate_start;
 	}
 
@@ -212,14 +211,21 @@ export function comment() {
  * @param {DocumentFragment | Element} dom
  */
 export function append(anchor, dom) {
-	if (hydrating) return;
-
 	var effect = /** @type {import('#client').Effect} */ (current_effect);
 
-	effect.dom =
-		dom.nodeType === 11
-			? /** @type {import('#client').TemplateNode[]} */ ([...dom.childNodes])
-			: /** @type {Element | Comment} */ (dom);
+	if (!hydrating) {
+		if (dom.nodeType === 11) {
+			// prepend an empty text node
+			var d1 = empty();
 
-	anchor.before(/** @type {Node} */ (dom));
+			/** @type {import('#client').TemplateNode} */ (dom.firstChild).before(d1);
+			effect.d1 = d1;
+		} else {
+			effect.d1 = /** @type {Element} */ (dom);
+		}
+
+		anchor.before(/** @type {Node} */ (dom));
+	}
+
+	effect.d2 = anchor?.previousSibling;
 }
