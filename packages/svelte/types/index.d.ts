@@ -2074,37 +2074,19 @@ declare module 'svelte/motion' {
 }
 
 declare module 'svelte/reactivity' {
-	class ReactiveDate extends Date {
-		
-		constructor(...values: any[]);
+	export const Date: DateConstructor;
+	export const Set: SetConstructor;
+	export const Map: MapConstructor;
+	const ReactiveURL: typeof URLWithReactiveSearchParams;
+	class URLWithReactiveSearchParams extends URL {
 		#private;
 	}
-	class ReactiveSet<T> extends Set<T> {
-		
-		constructor(value?: Iterable<T> | null | undefined);
-		
-		add(value: T): this;
-		#private;
-	}
-	class ReactiveMap<K, V> extends Map<K, V> {
-		
-		constructor(value?: Iterable<readonly [K, V]> | null | undefined);
-		
-		set(key: K, value: V): this;
-		#private;
-	}
-	class ReactiveURL extends URL {
-		get searchParams(): ReactiveURLSearchParams;
-		#private;
-	}
-	class ReactiveURLSearchParams extends URLSearchParams {
-		
-		[REPLACE](params: URLSearchParams): void;
-		#private;
-	}
-	const REPLACE: unique symbol;
+	const ReactiveURLSearchParams: {
+		new (init?: string | Record<string, string> | URLSearchParams | string[][] | undefined): URLSearchParams;
+		prototype: URLSearchParams;
+	};
 
-	export { ReactiveDate as Date, ReactiveSet as Set, ReactiveMap as Map, ReactiveURL as URL, ReactiveURLSearchParams as URLSearchParams };
+	export { ReactiveURL as URL, ReactiveURLSearchParams as URLSearchParams };
 }
 
 declare module 'svelte/server' {
