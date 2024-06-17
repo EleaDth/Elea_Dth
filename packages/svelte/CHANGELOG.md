@@ -1,5 +1,17 @@
 # svelte
 
+## 5.0.0-next.157
+
+### Patch Changes
+
+- fix: handle `is` attribute on elements with spread ([#12056](https://github.com/sveltejs/svelte/pull/12056))
+
+- fix: correctly process empty lines in messages ([#12057](https://github.com/sveltejs/svelte/pull/12057))
+
+- fix: rewrite state_unsafe_mutation message ([#12059](https://github.com/sveltejs/svelte/pull/12059))
+
+- fix: better types for `on` ([#12053](https://github.com/sveltejs/svelte/pull/12053))
+
 ## 5.0.0-next.156
 
 ### Patch Changes
